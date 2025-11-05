@@ -282,6 +282,17 @@ def monosemantic_analysis_for_token(token_id, model, enc, device="cpu", top_n=5)
 ################################################################################
 
 def nucleus_sampling(logits, p=0.95):
+    sorted_indices = torch.argsort(logits)
+    p_sum = 0
+    i = 0
+    while p_sum <= p:
+        p_sum += logits[sorted_indices[i]]
+        i+=1
+    logits /= p
+    new_logits = logits[sorted_indices[:i]]
+    return sorted_indices[torch.multinomial(new_logits, num_samples=1)]
+
+
     return torch.argmax(logits).item()
 
 
