@@ -121,7 +121,15 @@ def seq_collate_fn(batch):
 
     return padded
 
+class kMLP(nn.Module):
 
+    def __init__(self, layers):
+        self.layers = layers
+    
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
 ################################################################################
 # 3. K-gram MLP in a sequence-to-sequence approach
 ################################################################################
@@ -160,9 +168,22 @@ class KGramMLPSeqModel(nn.Module):
         self.num_inner_layers = num_inner_layers
         self.chunk_size = chunk_size
 
+        NUM_NEURONS = 128
         # fill in
-
-        self.net = None
+        layers = []
+        if num_inner_layers == 1:
+            layers.append(nn.Linear(self.k*self.vocab_size, self.vocab_size))
+            layers.append(nn.SiLU())
+        else:
+            layers.append(nn.Linear(self.k*self.vocab_size, NUM_NEURONS))
+            layers.append(nn.SiLU())
+            for _ in range(num_inner_layers - 2):
+                layers.append(nn.Linear(NUM_NEURONS, NUM_NEURONS))
+                layers.append(nn.SiLU())
+            layers.append(nn.Linear(NUM_NEURONS, self.vocab_size))
+            layers.append(nn.SiLU())
+        # need to do multiple times for num_hidden_layers
+        self.net = kMLP(layers)
 
     def forward(self, tokens_seq):
         """
