@@ -145,10 +145,9 @@ def compute_next_token_loss(logits, tokens):
 class kMLP(nn.Module):
 
     def __init__(self, vocab_size, k, num_inner_layers):
-        NUM_NEURONS = 128
+        NUM_NEURONS = 8
         super().__init__()
         self.layers = []
-        self.
         if num_inner_layers == 1:
             self.layers.append(nn.Linear(k*vocab_size, vocab_size))
             self.layers.append(nn.SiLU())
