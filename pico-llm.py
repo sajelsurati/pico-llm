@@ -259,7 +259,10 @@ class LSTMSeqModel(nn.Module):
 class RMSNorm(nn.Module):
     def __init__(self, dim, eps=1e-5):
         super().__init__()
-        pass
+        self.rms = nn.RMSNorm(normalized_shape=dim,eps=eps)
+
+    def forward(self, x):
+        return self.rms(x)
 
 class TransformerModel(nn.Module):
     def __init__(self, vocab_size=50257, d_model=1024, n_heads=2, n_blocks=4):
