@@ -159,6 +159,7 @@ class kMLP(nn.Module):
                 self.layers.append(nn.SiLU())
             self.layers.append(nn.Linear(NUM_NEURONS, vocab_size))
             self.layers.append(nn.SiLU())
+        self.layers = nn.ModuleList(self.layers)
     
     def forward(self, x):
         for layer in self.layers:
@@ -577,9 +578,9 @@ def main():
     ).to(device)
 
     models = {
-      # "kgram_mlp_seq": kgram_model,
-        "lstm_seq": lstm_model,
-      # "kvcache_transformer": kv_transformer,
+       "kgram_mlp_seq": kgram_model,
+        #"lstm_seq": lstm_model,
+    #    "kvcache_transformer": kv_transformer,
     }
 
 
