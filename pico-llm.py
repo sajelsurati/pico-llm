@@ -505,6 +505,13 @@ def main():
     if args.tinystories_weight > 0.0:
         print(f"Loading TinyStories from huggingface with weight={args.tinystories_weight}...")
         dataset = load_dataset("roneneldan/TinyStories", split="train")
+
+        #print(f"Loading TinyTextbooks from huggingface with weight={args.tinystories_weight}...")
+        #dataset = load_dataset("nampdn-ai/tiny-textbooks", split="train")
+
+        #print(f"Loading TinyLessons from huggingface with weight={args.tinystories_weight}...")
+        #dataset = load_dataset("nampdn-ai/tiny-lessons", split="train")
+
         dataset = dataset.select(range(train_subset_size))
     else:
         print("TinyStories weight=0 => skipping TinyStories.")
