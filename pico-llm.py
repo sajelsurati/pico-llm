@@ -144,15 +144,15 @@ def compute_next_token_loss(logits, tokens):
 
 class kMLP(nn.Module):
 
-    def __init__(self, vocab_size, k, num_inner_layers):
+    def __init__(self, vocab_size, k, num_inner_layers, embed_size):
         NUM_NEURONS = 8
         super().__init__()
         self.layers = []
         if num_inner_layers == 1:
-            self.layers.append(nn.Linear(k*vocab_size, vocab_size))
+            self.layers.append(nn.Linear(k*embed_size, vocab_size))
             self.layers.append(nn.SiLU())
         else:
-            self.layers.append(nn.Linear(k*vocab_size, NUM_NEURONS))
+            self.layers.append(nn.Linear(embed_size, NUM_NEURONS))
             self.layers.append(nn.SiLU())
             for _ in range(num_inner_layers - 2):
                 self.layers.append(nn.Linear(NUM_NEURONS, NUM_NEURONS))
@@ -183,8 +183,8 @@ class KGramMLPSeqModel(nn.Module):
         self.chunk_size = chunk_size
 
         # fill in
-        
-        self.net = kMLP(self.vocab_size, self.k, self.num_inner_layers)
+        self.embed = nn.Embedding(vocab_size, embed_size)
+        self.net = kMLP(self.vocab_size, self.k, self.num_inner_layers, self.embed_size)
 
     def forward(self, tokens_seq):
         """
@@ -194,14 +194,12 @@ class KGramMLPSeqModel(nn.Module):
         """
         seq_len, batch_size = tokens_seq.shape
         outputs = []
-        print(f"SEQ_LEN={seq_len}, BATCH_SIZE={batch_size}")
 
         start = 0
         while start < seq_len:
             end = min(start + self.chunk_size, seq_len)
             block_outputs = []
             for t in range(start, end):
-                print(f"TIMESTEP {t}/{seq_len}")
                 batch_logits = []
                 for b in range(batch_size):
                     if t < self.k:
@@ -210,11 +208,14 @@ class KGramMLPSeqModel(nn.Module):
                     else:
                         context_ids = tokens_seq[t-self.k:t, b].tolist()
 
-                    context_oh = F.one_hot(
-                        torch.tensor(context_ids, dtype=torch.long, device=tokens_seq.device),
-                        num_classes=self.vocab_size
-                    )
-                    context_flat = context_oh.flatten().float().unsqueeze(0)
+                    # context_oh = F.one_hot(
+                    #     torch.tensor(context_ids, dtype=torch.long, device=tokens_seq.device),
+                    #     num_classes=self.vocab_size
+                    # )
+                    # context_oh = self.embed(context_oh)
+                    # context_flat = context_oh.flatten().float().unsqueeze(0)
+                    context_emb = self.embed(torch.Tensor(context_ids).to(torch.long))
+                    context_flat = context_emb.flatten().float().unsqueeze(0)
                     logits_b = self.net(context_flat)  # (1, vocab_size)
                     batch_logits.append(logits_b)
                 block_outputs.append(torch.cat(batch_logits, dim=0).unsqueeze(0))  # (1, batch, vocab_size)
@@ -224,7 +225,6 @@ class KGramMLPSeqModel(nn.Module):
             start = end
 
         outputs = torch.cat(outputs, dim=0)  # (seq_len, batch, vocab_size)
-        print(f"Forward done outputs.shape={outputs.shape}")
         return outputs
 
 
