@@ -194,12 +194,14 @@ class KGramMLPSeqModel(nn.Module):
         """
         seq_len, batch_size = tokens_seq.shape
         outputs = []
+        print(f"SEQ_LEN={seq_len}, BATCH_SIZE={batch_size}")
 
         start = 0
         while start < seq_len:
             end = min(start + self.chunk_size, seq_len)
             block_outputs = []
             for t in range(start, end):
+                print(f"TIMESTEP {t}/{seq_len}")
                 batch_logits = []
                 for b in range(batch_size):
                     if t < self.k:
@@ -222,6 +224,7 @@ class KGramMLPSeqModel(nn.Module):
             start = end
 
         outputs = torch.cat(outputs, dim=0)  # (seq_len, batch, vocab_size)
+        print(f"Forward done outputs.shape={outputs.shape}")
         return outputs
 
 
@@ -376,7 +379,8 @@ def train_one_model(model,
                     max_steps_per_epoch=None,
                     enc=None,
                     monosemantic_info=None,
-                    prompt="Once upon a"):
+                    prompt="Once upon a",
+                    test_loader=None):
     """
     We add `prompt` as an explicit argument so we can pass it down from main().
     """
@@ -385,6 +389,8 @@ def train_one_model(model,
     start_time = time.time()
     next_sample_time = start_time
     global_step = 0
+    train_losses = []
+    test_losses = []
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -460,11 +466,43 @@ def train_one_model(model,
 
         avg_loss = total_loss / step_in_epoch
         print(f"[{model_name}] *** End of Epoch {epoch} *** Avg Loss: {avg_loss:.4f}")
+        train_losses.append(avg_loss)
+
+        if test_loader is not None:
+            test_loss = evaluate_loss(model, test_loader, device)
+            test_losses.append(test_loss)
+            print(f"[{model_name}] *** End of Epoch {epoch} *** Test Loss: {test_loss:.4f}")
+
+    return train_losses, test_losses
+
 
 
 ################################################################################
 # 9. Main
 ################################################################################
+def train_test_split(seqs, train_frac=0.8):
+    n = len(seqs)
+    n_train = int(n * train_frac)
+    return seqs[:n_train], seqs[n_train:]
+
+def evaluate_loss(model, loader, device):
+    model.eval()
+    total_loss = 0.0
+    total_steps = 0
+
+    with torch.no_grad():
+        for batch_tokens in loader:
+            batch_tokens = batch_tokens.to(device)
+            logits = model(batch_tokens)
+            loss = compute_next_token_loss(logits, batch_tokens)
+            total_loss += loss.item()
+            total_steps += 1
+
+    if total_steps == 0:
+        return float("nan")
+
+    return total_loss/total_steps
+
 
 def main():
     args = parse_args()
@@ -505,13 +543,6 @@ def main():
     if args.tinystories_weight > 0.0:
         print(f"Loading TinyStories from huggingface with weight={args.tinystories_weight}...")
         dataset = load_dataset("roneneldan/TinyStories", split="train")
-
-        #print(f"Loading TinyTextbooks from huggingface with weight={args.tinystories_weight}...")
-        #dataset = load_dataset("nampdn-ai/tiny-textbooks", split="train")
-
-        #print(f"Loading TinyLessons from huggingface with weight={args.tinystories_weight}...")
-        #dataset = load_dataset("nampdn-ai/tiny-lessons", split="train")
-
         dataset = dataset.select(range(train_subset_size))
     else:
         print("TinyStories weight=0 => skipping TinyStories.")
@@ -550,16 +581,48 @@ def main():
     p_tiny = args.tinystories_weight
     if len(tinystories_seqs) == 0 and p_tiny>0:
         print("Warning: TinyStories is empty but tinystories_weight>0. That's okay, no data from it.")
-    combined_dataset = MixedSequenceDataset(
-        tinystories_seqs=tinystories_seqs,
-        other_seqs=other_seqs,
+    # combined_dataset = MixedSequenceDataset(
+    #     tinystories_seqs=tinystories_seqs,
+    #     other_seqs=other_seqs,
+    #     p_tiny=p_tiny
+    # )
+
+    # train_loader = torch.utils.data.DataLoader(
+    #     combined_dataset,
+    #     batch_size=batch_size,
+    #     shuffle=True,
+    #     num_workers=0,
+    #     collate_fn=seq_collate_fn
+    # )
+    train_frac = 0.8  # 80% train, 20% test
+
+    tiny_train, tiny_test = train_test_split(tinystories_seqs, train_frac)
+    other_train, other_test = train_test_split(other_seqs, train_frac)
+
+    train_dataset = MixedSequenceDataset(
+        tinystories_seqs=tiny_train,
+        other_seqs=other_train,
+        p_tiny=p_tiny
+    )
+
+    test_dataset = MixedSequenceDataset(
+        tinystories_seqs=tiny_test,
+        other_seqs=other_test,
         p_tiny=p_tiny
     )
 
     train_loader = torch.utils.data.DataLoader(
-        combined_dataset,
+        train_dataset,
         batch_size=batch_size,
         shuffle=True,
+        num_workers=0,
+        collate_fn=seq_collate_fn
+    )
+
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
         num_workers=0,
         collate_fn=seq_collate_fn
     )
@@ -567,13 +630,13 @@ def main():
     ############################################################################
     # Models
     ############################################################################
-    kgram_model = KGramMLPSeqModel(
-        vocab_size=vocab_size,
-        k=k,
-        embed_size=embed_size,
-        num_inner_layers=num_inner_layers,
-        chunk_size=chunk_size
-    ).to(device)
+    # kgram_model = KGramMLPSeqModel(
+    #     vocab_size=vocab_size,
+    #     k=k,
+    #     embed_size=embed_size,
+    #     num_inner_layers=num_inner_layers,
+    #     chunk_size=chunk_size
+    # ).to(device)
 
     lstm_model = LSTMSeqModel(
         vocab_size=vocab_size,
@@ -581,12 +644,12 @@ def main():
         hidden_size=embed_size
     ).to(device)
 
-    transformer = TransformerModel(
-    ).to(device)
+    # transformer = TransformerModel(
+    # ).to(device)
 
     models = {
-       "kgram_mlp_seq": kgram_model,
-        #"lstm_seq": lstm_model,
+       #"kgram_mlp_seq": kgram_model,
+        "lstm_seq": lstm_model,
     #    "kvcache_transformer": kv_transformer,
     }
 
@@ -596,7 +659,7 @@ def main():
     ############################################################################
     for model_name, model in models.items():
         print(f"\n=== Training model: {model_name} ===")
-        train_one_model(
+        train_losses, test_losses =train_one_model(
             model=model,
             loader=train_loader,
             epochs=num_epochs,
@@ -607,8 +670,12 @@ def main():
             sample_interval=sample_interval_seconds,
             max_steps_per_epoch=max_steps_per_epoch,
             enc=enc,
-            prompt=args.prompt  # <--- Pass the user-specified prompt here
-        )
+            prompt=args.prompt, # <--- Pass the user-specified prompt here
+            test_loader=test_loader,
+            )
+
+        print(f"[{model_name}] Train losses per epoch: {train_losses}")
+        print(f"[{model_name}] Test  losses per epoch: {test_losses}")
 
         # Final generation from the user-provided prompt (args.prompt).
         with torch.no_grad():
