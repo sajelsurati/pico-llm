@@ -268,11 +268,73 @@ class RMSNorm(nn.Module):
     def forward(self, x):
         return self.rms(x)
 
+class TransformerBlock(nn.Module):
+    def __init__(self, vocab_size=50257, d_model=1024, n_heads=2):
+        super().__init__()
+        self.DROP = .1
+        self.d_model = d_model
+        self.vocab_size = vocab_size
+        self.n_heads = n_heads
+
+        self.norm1 = RMSNorm(self.d_model)
+
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+
+
+        self.attn = nn.MultiheadAttention(self.d_model, self.n_heads)
+        self.norm2 = RMSNorm(self.d_model)
+        self.fc = nn.Linear(self.d_model, 4 * self.d_model)
+        self.act = nn.GELU()
+        self.projection = nn.Linear(4 * self.d_model, self.d_model)
+        self.dropout = nn.Dropout(self.DROP)
+
+
+    def forward(self, x):
+        norm_x = self.norm1(x)
+        w_q = self.w_q(norm_x)
+        w_k = self.w_k(norm_x)
+        w_v = self.w_v(norm_x)
+        x = x + self.attn(w_q, w_k, w_v)[0]
+        x = x + self.dropout(self.projection(self.act(self.fc((self.norm2(x))))))
+        return x
+
+
 class TransformerModel(nn.Module):
     def __init__(self, vocab_size=50257, d_model=1024, n_heads=2, n_blocks=4):
         super().__init__()
+        self.vocab = vocab_size
+        self.d = d_model
+        self.n_heads = n_heads
+        self.n_blocks = n_blocks
+        self.DROP = .1
 
-        pass
+        self.blocks = []
+        for _ in range(n_blocks):
+            self.blocks.append(TransformerBlock(self.vocab, self.d, self.n_heads))
+
+        self.blocks = nn.ModuleList(self.blocks)
+        self.embed1 = nn.Embedding(self.vocab, self.d)
+        self.embed2 = nn.Embedding(self.n_blocks, self.d)
+        self.drop = nn.Dropout(self.DROP)
+        self.norm = RMSNorm(self.d)
+        self.head = nn.Linear(self.d, self.vocab, bias=False)
+
+    def forward(self, x):
+        b, t = x.size()
+        # pos = torch.arange(0, t, dtype=torch.long).unsqueeze(0)
+
+        token_embed = self.embed1(x)
+        # pos_embed = self.embed2(pos)
+
+        # x = self.drop(token_embed + pos_embed)
+        x = self.drop(token_embed)
+        for block in self.blocks:
+            x = block(x)
+        
+        x = self.norm(x)
+        return self.head(x)
 
 
 ################################################################################
