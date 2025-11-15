@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from fla.layers.gla import GatedLinearAttention
 
 # We do not import numpy or scikit-learn, so we implement a naive k-means in pure PyTorch.
 # If you prefer scikit-learn, you can adapt the code.
@@ -284,6 +285,7 @@ class TransformerBlock(nn.Module):
 
 
         self.attn = nn.MultiheadAttention(self.d_model, self.n_heads)
+        #self.attn = GatedLinearAttention(hidden_size=self.d_model, num_heads=self.n_heads)
         self.norm2 = RMSNorm(self.d_model)
         self.fc = nn.Linear(self.d_model, 4 * self.d_model)
         self.act = nn.GELU()
