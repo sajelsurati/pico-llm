@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
 # We do not import numpy or scikit-learn, so we implement a naive k-means in pure PyTorch.
 # If you prefer scikit-learn, you can adapt the code.
@@ -278,13 +279,18 @@ class TransformerBlock(nn.Module):
 
         self.norm1 = RMSNorm(self.d_model)
 
-        self.w_q = nn.Linear(d_model, d_model)
-        self.w_k = nn.Linear(d_model, d_model)
-        self.w_v = nn.Linear(d_model, d_model)
+        #Set Q,K,V matrices
+        # self.w_q = nn.Linear(d_model, d_model)
+        # self.w_k = nn.Linear(d_model, d_model)
+        # self.w_v = nn.Linear(d_model, d_model)
 
+        # Attention Layer
+        self.attn = nn.MultiheadAttention(self.d_model, self.n_heads, batch_first=True)
 
-        self.attn = nn.MultiheadAttention(self.d_model, self.n_heads)
+        #Runs norm after
         self.norm2 = RMSNorm(self.d_model)
+
+        #Fully connected layer, 
         self.fc = nn.Linear(self.d_model, 4 * self.d_model)
         self.act = nn.GELU()
         self.projection = nn.Linear(4 * self.d_model, self.d_model)
@@ -292,22 +298,26 @@ class TransformerBlock(nn.Module):
 
 
     def forward(self, x):
+        mask = torch.ones((x.size()[1], x.size()[1]))
+        mask = torch.triu(mask)
+        # print(mask)
         norm_x = self.norm1(x)
-        w_q = self.w_q(norm_x)
-        w_k = self.w_k(norm_x)
-        w_v = self.w_v(norm_x)
-        x = x + self.attn(w_q, w_k, w_v)[0]
-        x = x + self.dropout(self.projection(self.act(self.fc((self.norm2(x))))))
+        # w_q = self.w_q(norm_x)
+        # w_k = self.w_k(norm_x)
+        # w_v = self.w_v(norm_x)
+        x_new = x + self.attn(norm_x, norm_x, norm_x, attn_mask=mask)[0]
+        x = x_new + self.dropout(self.projection(self.act(self.fc((self.norm2(x_new))))))
         return x
 
 
 class TransformerModel(nn.Module):
-    def __init__(self, vocab_size=50257, d_model=1024, n_heads=2, n_blocks=4):
+    def __init__(self, vocab_size=50257, d_model=1024, n_heads=2, n_blocks=4, block_size = 1024):
         super().__init__()
         self.vocab = vocab_size
         self.d = d_model
         self.n_heads = n_heads
         self.n_blocks = n_blocks
+        self.block_size = block_size
         self.DROP = .1
 
         self.blocks = []
@@ -316,18 +326,18 @@ class TransformerModel(nn.Module):
 
         self.blocks = nn.ModuleList(self.blocks)
         self.embed1 = nn.Embedding(self.vocab, self.d)
-        self.embed2 = nn.Embedding(self.n_blocks, self.d)
+        # self.embed2 = nn.Embedding(self.block_size, self.d)
         self.drop = nn.Dropout(self.DROP)
         self.norm = RMSNorm(self.d)
         self.head = nn.Linear(self.d, self.vocab, bias=False)
 
     def forward(self, x):
-        b, t = x.size()
-        # pos = torch.arange(0, t, dtype=torch.long).unsqueeze(0)
+        # b, t = x.size()
+        # print(t)
+        # pos = torch.arange(t, dtype=torch.long).unsqueeze(0)
 
         token_embed = self.embed1(x)
         # pos_embed = self.embed2(pos)
-
         # x = self.drop(token_embed + pos_embed)
         x = self.drop(token_embed)
         for block in self.blocks:
@@ -565,6 +575,15 @@ def evaluate_loss(model, loader, device):
 
     return total_loss/total_steps
 
+def graph(test_loss, train_loss, num_epochs):
+    plt.plot( [i+1 for i in range(num_epochs)], test_loss, label='Test', color='g')
+    plt.plot( [i+1 for i in range(num_epochs)], train_loss, label='Train', color='b')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title(f'Loss per Epoch for Transformer')
+    plt.legend()
+    plt.show()
+
 
 def main():
     args = parse_args()
@@ -575,7 +594,7 @@ def main():
 
     embed_size = args.embed_size
     batch_size = 16
-    num_epochs = 3
+    num_epochs = 10
     learning_rate = 1e-3
 
     block_size = args.block_size
@@ -699,13 +718,13 @@ def main():
     ############################################################################
     # Models
     ############################################################################
-    # kgram_model = KGramMLPSeqModel(
-    #     vocab_size=vocab_size,
-    #     k=k,
-    #     embed_size=embed_size,
-    #     num_inner_layers=num_inner_layers,
-    #     chunk_size=chunk_size
-    # ).to(device)
+    kgram_model = KGramMLPSeqModel(
+        vocab_size=vocab_size,
+        k=k,
+        embed_size=embed_size,
+        num_inner_layers=num_inner_layers,
+        chunk_size=chunk_size
+    ).to(device)
 
     lstm_model = LSTMSeqModel(
         vocab_size=vocab_size,
@@ -713,13 +732,13 @@ def main():
         hidden_size=embed_size
     ).to(device)
 
-    # transformer = TransformerModel(
-    # ).to(device)
+    transformer = TransformerModel(
+    ).to(device)
 
     models = {
        #"kgram_mlp_seq": kgram_model,
-        "lstm_seq": lstm_model,
-    #    "kvcache_transformer": kv_transformer,
+        # "lstm_seq": lstm_model,
+       "kvcache_transformer": transformer,
     }
 
 
@@ -742,6 +761,8 @@ def main():
             prompt=args.prompt, # <--- Pass the user-specified prompt here
             test_loader=test_loader,
             )
+        
+        graph(test_losses, train_losses, num_epochs)
 
         print(f"[{model_name}] Train losses per epoch: {train_losses}")
         print(f"[{model_name}] Test  losses per epoch: {test_losses}")
