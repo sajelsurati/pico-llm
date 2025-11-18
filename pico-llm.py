@@ -630,20 +630,22 @@ def main():
         #dataset = dataset.select_columns(['story'])
         #dataset = dataset.rename_columns({'story': 'text'})
 
-        #print(f"Loading Code Snippets from huggingface with weight={args.tinystories_weight}...")
-        #dataset = load_dataset("migtissera/Synthia-Coder-v1.5-I", split="train")
-        #dataset = dataset.select_columns(['response'])
-        #dataset = dataset.rename_columns({'response': 'text'})
+        #print(f"Loading Natural Science Reasoning Questions from huggingface with weight={args.tinystories_weight}...")
+        #dataset = load_dataset("dvilasuero/natural-science-reasoning", split="train")
+        #dataset = dataset.select_columns(['question'])
+        #dataset = dataset.rename_columns({'question': 'text'})
 
         #print(f"Loading Japanese Honorifics from huggingface with weight={args.tinystories_weight}...")
         #dataset = load_dataset("ronantakizawa/japanese-honorifics", split="train")  
         #dataset = dataset.select_columns(['base_sentence']) 
-        # dataset = dataset.rename_columns({'base_sentence': 'text'}) 
+        #dataset = dataset.rename_columns({'base_sentence': 'text'}) 
         
         #print(f"Loading Science Questions from huggingface with weight={args.tinystories_weight}...")
         #dataset = load_dataset("allenai/sciq", split="train") 
         #dataset = dataset.select_columns(['question'])
         #dataset = dataset.rename_columns({'question': 'text'}) 
+
+        train_subset_size = len(dataset)
         dataset = dataset.select(range(train_subset_size))
     else:
         print("TinyStories weight=0 => skipping TinyStories.")
