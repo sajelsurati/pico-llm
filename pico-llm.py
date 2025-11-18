@@ -1,3 +1,4 @@
+
 # starter code by matus & o1-pro
 import argparse
 import time
@@ -52,6 +53,14 @@ def parse_args():
     # Newly added device argument:
     parser.add_argument("--device_id", type=str, default="cuda:0",
                         help="Torch device identifier (default='cuda:0'). If CUDA is unavailable, fallback to 'cpu'.")
+    
+    parser.add_argument("--d_model", type=int, default=256,
+                        help="Transformer model dimension (default=256).")
+    parser.add_argument("--n_heads", type=int, default=2,
+                        help="Number of attention heads (default=2).")
+    parser.add_argument("--n_blocks", type=int, default=2,
+                        help="Number of transformer blocks (default=2).")
+
 
     args = parser.parse_args()
     return args
@@ -466,7 +475,10 @@ def train_one_model(model,
     train_losses = []
     test_losses = []
 
+    step_in_epoch = 0
     for epoch in range(1, epochs + 1):
+        step_in_epoch += 1
+        epoch_start = time.time()  
         model.train()
         total_loss = 0.0
         partial_loss = 0.0
@@ -539,7 +551,10 @@ def train_one_model(model,
                 break
 
         avg_loss = total_loss / step_in_epoch
-        print(f"[{model_name}] *** End of Epoch {epoch} *** Avg Loss: {avg_loss:.4f}")
+        epoch_time = time.time() - epoch_start  
+
+        print(f"[{model_name}] *** End of Epoch {epoch} *** "
+              f"Avg Loss: {avg_loss:.4f} | Epoch time: {epoch_time:.2f} sec")
         train_losses.append(avg_loss)
 
         if test_loader is not None:
@@ -735,7 +750,13 @@ def main():
     ).to(device)
 
     transformer = TransformerModel(
+        # vocab_size=vocab_size,
+        # d_model=args.d_model,
+        # n_heads=args.n_heads,
+        # n_blocks=args.n_blocks,
+        # block_size=block_size,
     ).to(device)
+
 
     models = {
        #"kgram_mlp_seq": kgram_model,
