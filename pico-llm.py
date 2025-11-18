@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from fla.layers.gla import GatedLinearAttention
+# from fla.layers.gla import GatedLinearAttention
 import matplotlib.pyplot as plt
 
 # We do not import numpy or scikit-learn, so we implement a naive k-means in pure PyTorch.
@@ -310,8 +310,7 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x):
         mask = torch.ones((x.size()[1], x.size()[1]))
-        mask = torch.triu(mask)
-        # print(mask)
+        mask = torch.tril(mask)
         norm_x = self.norm1(x)
         # w_q = self.w_q(norm_x)
         # w_k = self.w_k(norm_x)
@@ -611,7 +610,7 @@ def main():
 
     embed_size = args.embed_size
     batch_size = 16
-    num_epochs = 10
+    num_epochs = 3
     learning_rate = 1e-3
 
     block_size = args.block_size
