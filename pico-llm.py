@@ -54,8 +54,8 @@ def parse_args():
     parser.add_argument("--device_id", type=str, default="cuda:0",
                         help="Torch device identifier (default='cuda:0'). If CUDA is unavailable, fallback to 'cpu'.")
     
-    parser.add_argument("--d_model", type=int, default=256,
-                        help="Transformer model dimension (default=256).")
+    parser.add_argument("--d_model", type=int, default=1024,
+                        help="Transformer model dimension (default=1024).")
     parser.add_argument("--n_heads", type=int, default=2,
                         help="Number of attention heads (default=2).")
     parser.add_argument("--n_blocks", type=int, default=2,
@@ -289,14 +289,8 @@ class TransformerBlock(nn.Module):
 
         self.norm1 = RMSNorm(self.d_model)
 
-        #Set Q,K,V matrices
-        # self.w_q = nn.Linear(d_model, d_model)
-        # self.w_k = nn.Linear(d_model, d_model)
-        # self.w_v = nn.Linear(d_model, d_model)
-
         # Attention Layer
         self.attn = nn.MultiheadAttention(self.d_model, self.n_heads, batch_first=True)
-        #self.attn = GatedLinearAttention(hidden_size=self.d_model, num_heads=self.n_heads)
 
         #Runs norm after
         self.norm2 = RMSNorm(self.d_model)
@@ -312,9 +306,6 @@ class TransformerBlock(nn.Module):
         mask = torch.ones((x.size()[1], x.size()[1]))
         mask = torch.tril(mask)
         norm_x = self.norm1(x)
-        # w_q = self.w_q(norm_x)
-        # w_k = self.w_k(norm_x)
-        # w_v = self.w_v(norm_x)
         x_new = x + self.attn(norm_x, norm_x, norm_x, attn_mask=mask)[0]
         x = x_new + self.dropout(self.projection(self.act(self.fc((self.norm2(x_new))))))
         return x
@@ -336,19 +327,12 @@ class TransformerModel(nn.Module):
 
         self.blocks = nn.ModuleList(self.blocks)
         self.embed1 = nn.Embedding(self.vocab, self.d)
-        # self.embed2 = nn.Embedding(self.block_size, self.d)
         self.drop = nn.Dropout(self.DROP)
         self.norm = RMSNorm(self.d)
         self.head = nn.Linear(self.d, self.vocab, bias=False)
 
     def forward(self, x):
-        # b, t = x.size()
-        # print(t)
-        # pos = torch.arange(t, dtype=torch.long).unsqueeze(0)
-
         token_embed = self.embed1(x)
-        # pos_embed = self.embed2(pos)
-        # x = self.drop(token_embed + pos_embed)
         x = self.drop(token_embed)
         for block in self.blocks:
             x = block(x)
@@ -749,11 +733,11 @@ def main():
     ).to(device)
 
     transformer = TransformerModel(
-        # vocab_size=vocab_size,
-        # d_model=args.d_model,
-        # n_heads=args.n_heads,
-        # n_blocks=args.n_blocks,
-        # block_size=block_size,
+        vocab_size=vocab_size,
+        d_model=args.d_model,
+        n_heads=args.n_heads,
+        n_blocks=args.n_blocks,
+        block_size=block_size,
     ).to(device)
 
 
